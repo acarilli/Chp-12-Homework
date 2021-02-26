@@ -1,0 +1,173 @@
+---
+title: "Exercise 2"
+author: "Carilli"
+date: '`r format(lubridate::today(), "%B %d, %Y")`'
+output: 
+  html_document:
+    theme: cerulean
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, warning = FALSE, message = FALSE,
+                      options(digits = 3, scipen = 999))
+library(tidyverse)
+```
+
+```{r 2data}
+warm <- 
+  here::here("data", "EnvSurvey.csv") %>% 
+  read_csv() %>% 
+  janitor::clean_names() %>% 
+  rename(human_cause = humancause, party_7 = party7, income_cat = incomecat,
+         warm_agree = warmagree, warm_agree_continuous = warmagreecontinuous) %>% 
+  mutate(treatment = factor(treatment, 
+                             levels = c(1, 2, 3, 4),
+                             labels = c("personal", "graph", "scientist", "control")))
+```
+
+### (a)
+
+```{r 2a}
+warm %>% 
+  lm(human_cause ~ male + white + educ + income_cat + age + party_7, 
+     data = .) %>% 
+  jtools::summ(digits = 4)
+```
+
+#### (i)
+
+#### (ii) 
+
+```{r 2aii}
+warm %>% 
+  lm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .) %>% 
+  broom::augment() %>% 
+  summarize("maximum fitted value" = max(.fitted),
+            "minimum fitted value" = min(.fitted)) 
+```
+
+#### (iii) 
+
+```{r 2aiii}
+warm %>% 
+  lm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .) %>% 
+  broom::augment() %>%
+  ggplot(aes(x = age, y = .fitted)) + 
+  geom_smooth(method = "lm", formula = y ~ poly(x,2), se = FALSE)
+
+beta <- 
+warm %>% 
+  lm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .) %>% 
+  broom::tidy() %>% 
+  filter(term %in% c("age", "I(age^2)")) %>% 
+  pull(estimate)
+
+-beta[1]/(2*beta[2])
+```
+
+Age at minimum predicted value is `r -beta[1]/(2 * beta[2])`.
+
+### (b)
+
+#### (i)
+
+```{r 2bi}
+warm %>% 
+  drop_na() %>% 
+  glm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .,
+      family = binomial("probit")) %>% 
+  jtools::summ(digits = 4)
+```
+
+#### (ii)
+
+```{r 2bii}
+warm %>% 
+  drop_na() %>% 
+  glm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, ., 
+      family = binomial("probit")) %>% 
+  broom::augment() %>%
+  mutate(.fitted = pnorm(.fitted)) %>% 
+  summarize("maximum fitted value" = max(.fitted),
+            "minimum fitted value" = min(.fitted)) 
+```
+
+#### (iii)
+
+```{r 2biii}
+p1 <- 
+warm %>% 
+  drop_na() %>% 
+  glm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .,
+      family = binomial("probit")) %>% 
+  broom::augment() %>% 
+  pull(.fitted) %>% 
+  pnorm()
+
+mod_probit <- 
+  warm %>% 
+  drop_na() %>% 
+  glm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .,
+      family = binomial("probit"))
+
+newdata <- 
+warm %>% 
+  drop_na() %>% 
+  mutate(party_7 = party_7 + 1)
+
+p2 <- 
+predict.glm(mod_probit, newdata) %>%
+  pnorm()  
+  
+mean(p2 - p1)
+
+mfx::probitmfx(mod_probit, warm, atmean = FALSE)
+```
+
+#### (iv)
+
+```{r 2biv}
+newdata <- 
+warm %>% 
+  drop_na() %>% 
+  mutate(male = 0)
+
+p1 <- p2 <- 
+predict.glm(mod_probit, newdata) %>%
+  pnorm()  
+
+newdata <- 
+warm %>% 
+  drop_na() %>% 
+  mutate(male = 1)
+
+p2 <- 
+predict.glm(mod_probit, newdata) %>%
+  pnorm()  
+  
+mean(p2 - p1)
+```
+
+### (c)
+
+```{r 2c}
+warm %>% 
+  glm(warm_agree ~ relevel(treatment, ref = "control"), ., 
+      family = binomial("probit")) %>% 
+  jtools::summ(digits = 4)
+```
+
+```{r 2clm}
+lmtest::lrtest(
+  warm %>% 
+  glm(warm_agree ~ fct_collapse(treatment, frames = c("personal", "graph", "scientist")),
+      data = ., family = binomial("probit")) ,
+
+  warm %>% 
+  glm(warm_agree ~ relevel(treatment, ref = "control"), .,
+      family = binomial("probit"))  
+)
+```
+
+

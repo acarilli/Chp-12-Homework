@@ -1,0 +1,216 @@
+---
+title: "Exercise 1"
+author: "Carilli"
+date: '`r format(lubridate::today(), "%B %d, %Y")`'
+output: 
+  html_document:
+    theme: cerulean
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, warning = FALSE, message = FALSE,
+                      options(digits = 3, scipen = 999))
+library(tidyverse)
+# library(broom)
+# library(kableExtra)
+# library(mfx)
+# library(margins)
+# library(lmtest)
+```
+
+```{r 1data}
+iraq <- 
+  here::here("data", "BushIraq.csv") %>% 
+  read_csv() %>% 
+  janitor::clean_names() %>% 
+  rename(bush_vote_04 = bushvote04, pro_iraq_war_02 = proiraqwar02,
+         party_02 = party02, bush_vote_00 = bushvote00,
+         cut_rich_taxes_02 = cutrichtaxes02, abortion_00 = abortion00)
+```
+
+### (a)
+
+```{r 1a}
+jtools::export_summs(
+  
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02, data = .,
+      family = binomial("probit")),
+
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("probit")),
+digits = 4
+)
+
+```
+
+### (b)
+
+```{r 1b}
+vote_mod <- 
+  iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 +
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("probit"))
+
+p1 <- 
+  vote_mod %>% 
+  broom::augment() %>% 
+  pull(.fitted) %>% 
+  pnorm()
+
+newdata <- 
+iraq %>% 
+  drop_na() %>% 
+  mutate(pro_iraq_war_02 = pro_iraq_war_02 + sd(pro_iraq_war_02))
+
+p2 <- 
+predict.glm(vote_mod, newdata) %>%
+  pnorm()  
+  
+mean(p2 - p1)
+```
+
+### (c)
+
+```{r 1c}
+newdata <- 
+iraq %>% 
+  drop_na() %>% 
+  mutate(party_02 = party_02 + sd(party_02))
+
+p2 <- 
+predict.glm(vote_mod, newdata) %>%
+  pnorm()  
+  
+mean(p2 - p1)
+```
+
+### (d)
+
+```{r 1d}
+mfx::probitmfx(vote_mod, iraq, atmean = FALSE)
+margins::margins(vote_mod, iraq, atmeans = "")
+```
+
+### (e)
+
+```{r 1e}
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("logit")) %>% 
+  jtools::summ(digits = 4)
+```
+
+#### (i)
+
+#### (ii)
+
+#### (iii)
+
+```{r 1eiii}
+vote_mod <- 
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("logit"))
+mfx::logitmfx(vote_mod, iraq, atmean = FALSE)
+```
+
+
+### (f)
+
+```{r 1f}
+cor(
+iraq %>% 
+  drop_na() %$% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, 
+      family = binomial("logit")) %>% 
+  broom::augment() %>% 
+  mutate(.fitted = (exp(.fitted))/(1 + exp(.fitted))) %>% 
+  pull(.fitted) ,
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("probit")) %>%
+  broom::augment() %>% 
+  mutate(.fitted = pnorm(.fitted)) %>% 
+  pull(.fitted)
+)
+```
+
+### (g)
+
+```{r 1g}
+LR <- 
+2 * 
+(
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("probit")) %>% 
+  broom::glance() %>% 
+  pull(logLik) -
+
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ party_02 + bush_vote_00, data = .,
+      family = binomial("probit")) %>% 
+  broom::glance() %>% 
+  pull(logLik)
+)
+
+1 - pchisq(LR, 3)
+
+lmtest::lrtest(
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ party_02 + bush_vote_00, data = .,
+      family = binomial("probit")),  
+  
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("probit"))
+
+)
+```
+
+
+
+
+
+```{r}
+iraq %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02, .,
+      family = binomial(link = "probit")) 
+```
+
+$$
+P(\operatorname{bush\_vote\_04}) = \Phi[-0.96 + 0.56(\operatorname{pro\_iraq\_war\_02})]
+$$
+
+```{r}
+(-.96 + 3 * .56) %>% pnorm()
+```
+
+```{r}
+iraq %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 +
+        cut_rich_taxes_02 + abortion_00, .,
+      family = binomial(link = "probit")) 
+```
+

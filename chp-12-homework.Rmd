@@ -1,0 +1,581 @@
+---
+title: "Chapter 12 Homework"
+author: "Carilli"
+date: '`r format(lubridate::today(), "%B %d, %Y")`'
+output: 
+  html_document:
+    toc: false
+    toc_float: false
+    df_print: paged
+    theme: cerulean
+    highlight: tango
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, message = FALSE, error = FALSE,
+                      options(digits = 3, scipen = 999))
+library(tidyverse)
+```
+
+# Exercises {.tabset}
+
+## Exercise 1 {.tabset}
+```{r 1data}
+iraq <- 
+  here::here("data", "BushIraq.csv") %>% 
+  read_csv() %>% 
+  janitor::clean_names() %>% 
+  rename(bush_vote_04 = bushvote04, pro_iraq_war_02 = proiraqwar02,
+         party_02 = party02, bush_vote_00 = bushvote00,
+         cut_rich_taxes_02 = cutrichtaxes02, abortion_00 = abortion00)
+```
+
+### (a)
+
+```{r 1a}
+jtools::export_summs(
+  
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02, data = .,
+      family = binomial("probit")),
+
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("probit")),
+digits = 4
+)
+
+```
+
+### (b)
+
+```{r 1b}
+vote_mod <- 
+  iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 +
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("probit"))
+
+p1 <- 
+  vote_mod %>% 
+  broom::augment() %>% 
+  pull(.fitted) %>% 
+  pnorm()
+
+newdata <- 
+iraq %>% 
+  drop_na() %>% 
+  mutate(pro_iraq_war_02 = pro_iraq_war_02 + sd(pro_iraq_war_02))
+
+p2 <- 
+predict.glm(vote_mod, newdata) %>%
+  pnorm()  
+  
+mean(p2 - p1)
+```
+
+### (c)
+
+```{r 1c}
+newdata <- 
+iraq %>% 
+  drop_na() %>% 
+  mutate(party_02 = party_02 + sd(party_02))
+
+p2 <- 
+predict.glm(vote_mod, newdata) %>%
+  pnorm()  
+  
+mean(p2 - p1)
+```
+
+### (d)
+
+```{r 1d}
+mfx::probitmfx(vote_mod, iraq, atmean = FALSE)
+margins::margins(vote_mod, iraq)
+```
+
+### (e) {.tabset}
+
+```{r 1e}
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("logit")) %>% 
+  jtools::summ(digits = 4)
+```
+
+#### (i)
+
+#### (ii)
+
+#### (iii)
+
+```{r 1eiii}
+vote_mod <- 
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("logit"))
+mfx::logitmfx(vote_mod, iraq, atmean = FALSE)
+```
+
+
+### (f)
+
+```{r 1f}
+cor(
+iraq %>% 
+  drop_na() %$% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, 
+      family = binomial("logit")) %>% 
+  broom::augment() %>% 
+  mutate(.fitted = (exp(.fitted))/(1 + exp(.fitted))) %>% 
+  pull(.fitted) ,
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("probit")) %>%
+  broom::augment() %>% 
+  mutate(.fitted = pnorm(.fitted)) %>% 
+  pull(.fitted)
+)
+```
+
+### (g)
+
+```{r 1g}
+LR <- 
+2 * 
+(
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("probit")) %>% 
+  broom::glance() %>% 
+  pull(logLik) -
+
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ party_02 + bush_vote_00, data = .,
+      family = binomial("probit")) %>% 
+  broom::glance() %>% 
+  pull(logLik)
+)
+
+1 - pchisq(LR, 3)
+
+lmtest::lrtest(
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ party_02 + bush_vote_00, data = .,
+      family = binomial("probit")),  
+  
+iraq %>% 
+  drop_na() %>% 
+  glm(bush_vote_04 ~ pro_iraq_war_02 + party_02 + bush_vote_00 + 
+        cut_rich_taxes_02 + abortion_00, data = .,
+      family = binomial("probit"))
+
+)
+```
+## Exercise 2 {.tabset}
+```{r 2data}
+warm <- 
+  here::here("data", "EnvSurvey.csv") %>% 
+  read_csv() %>% 
+  janitor::clean_names() %>% 
+  rename(human_cause = humancause, party_7 = party7, income_cat = incomecat,
+         warm_agree = warmagree, warm_agree_continuous = warmagreecontinuous) %>% 
+  mutate(treatment = factor(treatment, 
+                             levels = c(1, 2, 3, 4),
+                             labels = c("personal", "graph", "scientist", "control")))
+```
+
+### (a) {.tabset}
+
+```{r 2a}
+warm %>% 
+  lm(human_cause ~ male + white + educ + income_cat + age + party_7, 
+     data = .) %>% 
+  jtools::summ(digits = 4)
+```
+
+#### (i)
+
+#### (ii) 
+
+```{r 2aii}
+warm %>% 
+  lm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .) %>% 
+  broom::augment() %>% 
+  summarize("maximum fitted value" = max(.fitted),
+            "minimum fitted value" = min(.fitted)) 
+```
+
+#### (iii) 
+
+```{r 2aiii}
+warm %>% 
+  lm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .) %>% 
+  broom::augment() %>%
+  ggplot(aes(x = age, y = .fitted)) + 
+  geom_smooth(method = "lm", formula = y ~ poly(x,2), se = FALSE)
+
+beta <- 
+warm %>% 
+  lm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .) %>% 
+  broom::tidy() %>% 
+  filter(term %in% c("age", "I(age^2)")) %>% 
+  pull(estimate)
+
+-beta[1]/(2*beta[2])
+```
+
+Age at minimum predicted value is `r -beta[1]/(2 * beta[2])`.
+
+### (b) {.tabset}
+
+#### (i)
+
+```{r 2bi}
+warm %>% 
+  drop_na() %>% 
+  glm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .,
+      family = binomial("probit")) %>% 
+  jtools::summ(digits = 4)
+```
+
+#### (ii)
+
+```{r 2bii}
+warm %>% 
+  drop_na() %>% 
+  glm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, ., 
+      family = binomial("probit")) %>% 
+  broom::augment() %>%
+  mutate(.fitted = pnorm(.fitted)) %>% 
+  summarize("maximum fitted value" = max(.fitted),
+            "minimum fitted value" = min(.fitted)) 
+```
+
+#### (iii)
+
+```{r 2biii}
+p1 <- 
+warm %>% 
+  drop_na() %>% 
+  glm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .,
+      family = binomial("probit")) %>% 
+  broom::augment() %>% 
+  pull(.fitted) %>% 
+  pnorm()
+
+mod_probit <- 
+  warm %>% 
+  drop_na() %>% 
+  glm(human_cause ~ male + white + educ + income_cat + age + I(age^2) + party_7, .,
+      family = binomial("probit"))
+
+newdata <- 
+warm %>% 
+  drop_na() %>% 
+  mutate(party_7 = party_7 + 1)
+
+p2 <- 
+predict.glm(mod_probit, newdata) %>%
+  pnorm()  
+  
+mean(p2 - p1)
+
+mfx::probitmfx(mod_probit, warm, atmean = FALSE)
+```
+
+#### (iv)
+
+```{r 2biv}
+newdata <- 
+warm %>% 
+  drop_na() %>% 
+  mutate(male = 0)
+
+p1 <- p2 <- 
+predict.glm(mod_probit, newdata) %>%
+  pnorm()  
+
+newdata <- 
+warm %>% 
+  drop_na() %>% 
+  mutate(male = 1)
+
+p2 <- 
+predict.glm(mod_probit, newdata) %>%
+  pnorm()  
+  
+mean(p2 - p1)
+```
+
+### (c)
+
+```{r 2c}
+warm %>% 
+  glm(warm_agree ~ relevel(treatment, ref = "control"), ., 
+      family = binomial("probit")) %>% 
+  jtools::summ(digits = 4)
+```
+
+```{r 2clm}
+lmtest::lrtest(
+  warm %>% 
+  glm(warm_agree ~ fct_collapse(treatment, frames = c("personal", "graph", "scientist")),
+      data = ., family = binomial("probit")) ,
+
+  warm %>% 
+  glm(warm_agree ~ relevel(treatment, ref = "control"), .,
+      family = binomial("probit"))  
+)
+```
+
+## Exercise 3 {.tabset}
+```{r 3data}
+nfl <- 
+  here::here("data", "Football coaches.csv") %>% 
+  read_csv() %>% 
+  janitor::clean_names() %>% 
+  rename(pts_scored = ptsscored, pts_allowed = ptsallowed, pt_diff = ptdif,
+         final_year_of_coaching = finalyearofcoaching)
+```
+
+### (a)
+
+```{r 3a, message=FALSE}
+nfl %>% 
+  glm(fired_coach ~ win_pct, family = binomial(probit), .) %>% 
+  jtools::summ()
+
+nfl %>% 
+  ggplot(aes(x = win_pct, y = fired_coach)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) + 
+  geom_smooth(method = "glm", 
+              method.args = list(family = binomial(link = "probit")),
+              se = FALSE, color = "red")
+```
+
+
+### (b)
+
+```{r 3b}
+mod_lpm <-
+  nfl %>% 
+  lm(fired_coach ~ win_pct + lag_win_pct + new_coach + schedule_strength + tenure, .)
+
+mod_probit <- 
+  nfl %>% 
+  glm(fired_coach ~ win_pct + lag_win_pct + new_coach + schedule_strength + tenure, .,
+      family = binomial("probit"))
+
+mod_logit <- 
+  nfl %>% 
+  glm(fired_coach ~ win_pct + lag_win_pct + new_coach + schedule_strength + tenure, .,
+      family = binomial("logit"))
+
+jtools::export_summs(mod_lpm, mod_probit, mod_logit, 
+                     model.names = c("LPM", "Probit", "Logit"))
+jtools::plot_summs(mod_lpm, mod_probit, mod_logit, 
+                   model.names = c("LPM", "Probit", "Logit"))
+```
+
+
+### (c)
+
+```{r 3c}
+rbind(
+mod_lpm %>% 
+  broom::augment() %>% 
+  summarize(min(.fitted), max(.fitted)),
+
+mod_probit %>% 
+  broom::augment() %>%
+  mutate(.fitted = pnorm(.fitted)) %>% 
+  summarize(min(.fitted), max(.fitted)),
+
+mod_logit %>% 
+  broom::augment() %>% 
+  mutate(.fitted = (exp(.fitted))/(1 + exp(.fitted))) %>% 
+  summarize(min(.fitted), max(.fitted))
+
+) %>% 
+  mutate(models = c("LPM", "Probit", "Logit"))
+```
+
+### (d)
+
+```{r 3d}
+tibble(
+  lpm = 
+  mod_lpm %>% 
+  broom::augment() %>%
+  pull(.fitted),
+  
+  probit = 
+  mod_probit %>% 
+  broom::augment() %>%
+  mutate(.fitted = pnorm(.fitted)) %>% 
+  pull(.fitted),
+
+  logit = 
+  mod_logit %>% 
+  broom::augment() %>% 
+  mutate(.fitted = (exp(.fitted))/(1 + exp(.fitted))) %>% 
+  pull(.fitted) 
+
+) %>% 
+  cor() 
+```
+
+### (e) {.tabset}
+
+The hypothesis we are testing is 
+
+$$
+\begin{align} 
+H_0&: \beta_{\text{lag_win_pct}} + \beta_{\text{new_coach,lag_win_pct}} = 0 \\
+H_1&: \beta_{\text{lag_win_pct}} + \beta_{\text{new_coach,lag_win_pct}} \ne 0 \\
+\end{align}
+$$
+
+```{r 3e}
+# unrestricted model
+jtools::export_summs(
+nfl %>% 
+  glm(fired_coach ~ win_pct + lag_win_pct * new_coach + schedule_strength + tenure, 
+      data = ., family = binomial("probit")) ,
+
+# restricted model
+
+nfl %>% 
+  glm(fired_coach ~ win_pct + I(lag_win_pct - I(lag_win_pct*new_coach)) + 
+        new_coach + schedule_strength + tenure, data = .,
+      family = binomial("probit")) ,
+digits = 4, model.names = c("Unrestricted", "Restricted")
+)
+```
+
+#### Wald Test
+
+```{r 3ewald}
+car::linearHypothesis(
+nfl %>% 
+  glm(fired_coach ~ win_pct + lag_win_pct * new_coach + schedule_strength + tenure,
+      data = ., family = binomial("probit")),
+
+"lag_win_pct + lag_win_pct:new_coach = 0"
+)
+```
+
+#### LR test
+
+```{r 3elm}
+lmtest::lrtest(
+# unrestricted model
+nfl %>% 
+  glm(fired_coach ~ win_pct + lag_win_pct * new_coach + schedule_strength + tenure, .,
+      family = binomial("probit")),
+
+# restricted model
+
+nfl %>% 
+  glm(fired_coach ~ win_pct + I(lag_win_pct - I(lag_win_pct*new_coach)) + 
+        new_coach + schedule_strength + tenure, ., 
+      family = binomial("probit"))
+)
+```
+## Exercise 4 {.tabset}
+```{r 4data}
+donors <- 
+  here::here("data", "kalla-broockman-donor-access-2013-data.csv") %>% 
+  read_csv() %>% 
+  janitor::clean_names() %>% 
+  rename(staff_rank = staffrank)
+```
+
+### (a)
+
+
+### (b)
+
+```{r 4b}
+donors %>% 
+  mutate(met_congress = staff_rank == 5) %>% 
+  glm(met_congress ~ treat_donor, ., family = binomial("probit")) %>% 
+  jtools::summ(digits = 4)
+
+donors %>% 
+  mutate(met_congress = staff_rank == 5) %>% 
+  glm(met_congress ~ treat_donor, ., family = binomial("probit")) %>% 
+  mfx::probitmfx(data = donors %>% mutate(met_congress = staff_rank == 5), atmean = FALSE)
+```
+
+
+### (c)
+
+
+### (d)
+
+```{r 4d}
+donors %>% 
+  mutate(met_congress = staff_rank == 5) %$% 
+  lm(met_congress ~ treat_donor) %>% 
+  jtools::summ(digits = 4)
+
+tibble(
+  lpm = 
+    donors %>% 
+    mutate(met_congress = staff_rank == 5) %>% 
+    lm(met_congress ~ treat_donor, .) %>% 
+    broom::augment() %>% 
+    pull(.fitted),
+  
+  probit = donors %>% 
+    mutate(met_congress = staff_rank == 5) %>% 
+    glm(met_congress ~ treat_donor, ., 
+        family = binomial("probit")) %>% 
+    broom::augment() %>% 
+    mutate(.fitted = pnorm(.fitted)) %>% 
+    pull(.fitted)
+) %>% 
+  cor() 
+
+```
+
+### (e)
+
+```{r 4e}
+donors %>% 
+  mutate(met_congress = staff_rank > 2) %>% 
+  lm(met_congress ~ treat_donor, .) %>% 
+  jtools::summ(digits = 4)
+```
+
+### (f)
+
+```{r 4f}
+donors %>% 
+  mutate(met_congress = staff_rank == 1) %>% 
+  lm(met_congress ~ treat_donor, .) %>% 
+  jtools::summ(digits = 4)
+```
+
+### (g)

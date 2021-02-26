@@ -1,0 +1,198 @@
+---
+title: "Exercise 3"
+author: "Carilli"
+date: '`r format(lubridate::today(), "%B %d, %Y")`'
+output: 
+  html_document:
+    theme: cerulean
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, warning = FALSE, message = FALSE,
+                      options(digits = 3, scipen = 999))
+library(tidyverse)
+# library(janitor)
+# library(jtools)
+# library(magrittr)
+# library(broom)
+# library(kableExtra)
+# library(mfx)
+# library(margins)
+# library(lmtest)
+```
+
+```{r 3data}
+nfl <- 
+  here::here("data", "Football coaches.csv") %>% 
+  read_csv() %>% 
+  janitor::clean_names() %>% 
+  rename(pts_scored = ptsscored, pts_allowed = ptsallowed, pt_diff = ptdif,
+         final_year_of_coaching = finalyearofcoaching)
+```
+
+### (a)
+
+```{r 3a, message=FALSE}
+nfl %>% 
+  glm(fired_coach ~ win_pct, family = binomial(probit), .) %>% 
+  jtools::summ()
+
+nfl %>% 
+  ggplot(aes(x = win_pct, y = fired_coach)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) + 
+  geom_smooth(method = "glm", 
+              method.args = list(family = binomial(link = "probit")),
+              se = FALSE, color = "red")
+```
+
+
+### (b)
+
+```{r 3b}
+mod_lpm <-
+  nfl %>%
+  lm(fired_coach ~ win_pct + lag_win_pct + new_coach +
+       schedule_strength + tenure,
+     .)
+
+mod_probit <-
+  nfl %>%
+  glm(
+    fired_coach ~ win_pct + lag_win_pct + new_coach +
+      schedule_strength + tenure,
+    .,
+    family = binomial("probit")
+  )
+
+mod_logit <-
+  nfl %>%
+  glm(
+    fired_coach ~ win_pct + lag_win_pct + 
+      new_coach + schedule_strength + tenure,
+    .,
+    family = binomial("logit")
+  )
+
+jtools::export_summs(mod_lpm, mod_probit, mod_logit, 
+                     model.names = c("LPM", "Probit", "Logit"))
+jtools::plot_summs(mod_lpm, mod_probit, mod_logit, 
+                   model.names = c("LPM", "Probit", "Logit"))
+```
+
+
+### (c)
+
+```{r 3c}
+rbind(
+  mod_lpm %>%
+    broom::augment() %>%
+    summarize(min(.fitted), max(.fitted), mean(.fitted)),
+  
+  mod_probit %>%
+    broom::augment() %>%
+    mutate(.fitted = pnorm(.fitted)) %>%
+    summarize(min(.fitted), max(.fitted), mean(.fitted)),
+  
+  mod_logit %>%
+    broom::augment() %>%
+    mutate(.fitted = (exp(.fitted)) / (1 + exp(.fitted))) %>%
+    summarize(min(.fitted), max(.fitted), mean(.fitted))
+  
+) %>%
+  mutate(models = c("LPM", "Probit", "Logit"))
+```
+
+### (d)
+
+```{r 1d}
+tibble(
+  lpm =
+    mod_lpm %>%
+    broom::augment() %>%
+    pull(.fitted),
+  
+  probit =
+    mod_probit %>%
+    broom::augment() %>%
+    mutate(.fitted = pnorm(.fitted)) %>%
+    pull(.fitted),
+  
+  logit =
+    mod_logit %>%
+    broom::augment() %>%
+    mutate(.fitted = (exp(.fitted)) / (1 + exp(.fitted))) %>%
+    pull(.fitted)
+  
+) %>%
+  cor()
+```
+
+### (e)
+
+The hypothesis we are testing is 
+
+$$
+\begin{align} 
+H_0&: \beta_{\text{lag_win_pct}} + \beta_{\text{new_coach,lag_win_pct}} = 0 \\
+H_1&: \beta_{\text{lag_win_pct}} + \beta_{\text{new_coach,lag_win_pct}} \ne 0 \\
+\end{align}
+$$
+
+```{r 1e}
+# unrestricted model
+jtools::export_summs(
+  nfl %>%
+    glm(
+      fired_coach ~ win_pct + lag_win_pct * new_coach + schedule_strength + tenure,
+      data = .,
+      family = binomial("probit")
+    ) ,
+  
+  # restricted model
+  
+  nfl %>%
+    glm(
+      fired_coach ~ win_pct + I(lag_win_pct - I(lag_win_pct * new_coach)) +
+        new_coach + schedule_strength + tenure,
+      data = .,
+      family = binomial("probit")
+    ) ,
+  digits = 4,
+  model.names = c("Unrestricted", "Restricted")
+)
+```
+
+#### Wald Test
+
+```{r 3ewald}
+car::linearHypothesis(
+  nfl %>%
+    glm(
+      fired_coach ~ win_pct + lag_win_pct * new_coach + schedule_strength + tenure,
+      data = .,
+      family = binomial("probit")
+    ),
+  
+  "lag_win_pct + lag_win_pct:new_coach = 0"
+)
+```
+
+#### LR test
+
+```{r 3elm}
+lmtest::lrtest(
+# unrestricted model
+nfl %>% 
+  glm(fired_coach ~ win_pct + lag_win_pct * new_coach + schedule_strength + tenure,
+      family = binomial("probit"), data = .),
+
+# restricted model
+
+nfl %>% 
+  glm(fired_coach ~ win_pct + I(lag_win_pct - I(lag_win_pct*new_coach)) + new_coach + schedule_strength + tenure,
+      family = binomial("probit"), data = .)
+)
+```
+
